@@ -9,7 +9,7 @@ import qs.Ui
 // sends `rt400ctl set`.
 BarWidget {
   id: root
-  moduleName: "local.pccooler-rt400"
+  moduleName: "io.github.mamxalf.pccooler-rt400"
 
   readonly property string ctl: Quickshell.env("HOME") + "/.local/bin/rt400ctl"
 
@@ -107,7 +107,7 @@ BarWidget {
   }
 
   IpcHandler {
-    target: "local.pccooler-rt400"
+    target: "io.github.mamxalf.pccooler-rt400"
 
     function open(): void { root.open() }
     function close(): void { root.close() }

@@ -1,4 +1,4 @@
-"""rt400ctl: klien tipis untuk rt400d, plus perintah diagnostik langsung."""
+"""rt400ctl: thin client for rt400d, plus a few direct diagnostic commands."""
 import argparse
 import json
 import socket
@@ -17,31 +17,31 @@ def request(payload):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="rt400ctl")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("status", help="status daemon (JSON)")
-    s = sub.add_parser("set", help="atur sumber/satuan")
+    sub.add_parser("status", help="daemon status (JSON)")
+    s = sub.add_parser("set", help="change source, unit and other settings")
     s.add_argument("--source", choices=daemon.SOURCES)
     s.add_argument("--unit", choices=("c", "f"))
-    s.add_argument("--fixed", type=int, help="nilai 0-199 untuk source=fixed")
-    s.add_argument("--rotate-sources", help="daftar dipisah koma untuk source=rotate, mis. cpu,load")
-    s.add_argument("--rotate-seconds", type=int, help="detik per sumber (2-60)")
-    s.add_argument("--alert", choices=("on", "off"), help="kedipkan layar saat suhu melewati ambang")
-    s.add_argument("--alert-threshold", type=int, help="ambang peringatan, Celsius (30-110)")
-    d = sub.add_parser("dry-run", help="cetak paket yang akan dikirim, tanpa menulis ke perangkat")
+    s.add_argument("--fixed", type=int, help="value 0-199 for source=fixed")
+    s.add_argument("--rotate-sources", help="comma-separated list for source=rotate, e.g. cpu,load")
+    s.add_argument("--rotate-seconds", type=int, help="seconds per source (2-60)")
+    s.add_argument("--alert", choices=("on", "off"), help="blink the display when the temperature passes the threshold")
+    s.add_argument("--alert-threshold", type=int, help="alert threshold in Celsius (30-110)")
+    d = sub.add_parser("dry-run", help="print the packet that would be sent, without writing to the device")
     d.add_argument("--source", default="cpu", choices=("cpu", "gpu", "max", "nvme", "load", "ram"))
     d.add_argument("--unit", default="c", choices=("c", "f"))
-    sub.add_parser("version", help="query versi firmware (menulis ke perangkat langsung)")
+    sub.add_parser("version", help="query the firmware version (writes to the device directly)")
     args = p.parse_args(argv)
 
     if args.cmd == "dry-run":
         value = sensors.read(args.source)
         if value is None:
-            sys.exit("sensor tidak tersedia")
+            sys.exit("sensor unavailable")
         unit = args.unit if args.source in sensors.TEMP_SOURCES else "c"
         print(f"{value:.1f} -> {protocol.to_display_value(value, unit)}")
         print(protocol.temperature_report(value, unit)[:8].hex(" "), "...")
     elif args.cmd == "version":
         with device.Display() as display:
-            print(display.version()[:8].hex(" "), "... (mentah)")
+            print(display.version()[:8].hex(" "), "... (raw)")
     else:
         payload = {"cmd": args.cmd}
         if args.cmd == "set":
@@ -55,7 +55,7 @@ def main(argv=None):
         try:
             print(json.dumps(request(payload)))
         except OSError as exc:
-            sys.exit(f"rt400d tidak berjalan: {exc}")
+            sys.exit(f"rt400d is not running: {exc}")
 
 
 if __name__ == "__main__":

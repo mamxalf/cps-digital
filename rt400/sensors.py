@@ -1,4 +1,4 @@
-"""Baca suhu CPU/GPU dari /sys/class/hwmon (derajat Celsius)."""
+"""Read temperatures, CPU load and RAM usage from /sys/class/hwmon, /proc/stat and /proc/meminfo."""
 from pathlib import Path
 
 HWMON = Path("/sys/class/hwmon")
@@ -54,7 +54,7 @@ _prev_cpu = None
 
 
 def cpu_load(stat="/proc/stat"):
-    """Beban CPU 0-100 sejak panggilan sebelumnya (pertama kali: 0)."""
+    """CPU load 0-100 since the previous call (0 on the first call)."""
     global _prev_cpu
     with open(stat) as f:
         vals = [int(v) for v in f.readline().split()[1:]]
@@ -75,14 +75,14 @@ def ram_percent(meminfo="/proc/meminfo"):
     return 100.0 * (1 - avail / total) if total and avail is not None else None
 
 
-# Jenis nilai: "temp" dikonversi ke F bila diminta, "percent" diberi sufiks %.
+# Value kinds: "temp" is converted to F on request, "percent" gets a % suffix, "raw" is shown as is.
 KINDS = {"cpu": "temp", "gpu": "temp", "max": "temp", "nvme": "temp",
          "load": "percent", "ram": "percent", "fixed": "raw"}
 TEMP_SOURCES = tuple(k for k, v in KINDS.items() if v == "temp")
 
 
 def read(source, root=HWMON):
-    """Kembalikan nilai sumber, atau None bila sensor tak tersedia."""
+    """Return the value of a source, or None when its sensor is unavailable."""
     if source == "cpu":
         return cpu_temp(root)
     if source == "gpu":
@@ -96,4 +96,4 @@ def read(source, root=HWMON):
         return cpu_load()
     if source == "ram":
         return ram_percent()
-    raise ValueError(f"sumber tidak dikenal: {source}")
+    raise ValueError(f"unknown source: {source}")

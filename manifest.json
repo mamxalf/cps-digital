@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.mamxalf.pccooler-rt400",
+  "name": "PCCooler RT400",
+  "version": "1.0.0",
+  "author": "mamxalf",
+  "license": "MIT",
+  "description": "Bar widget and settings panel for the PCCooler RT400 Digital cooler display: CPU/GPU/SSD temperature, CPU load, RAM, rotation and an over-temperature alert.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "PCCooler RT400",
+    "description": "Shows what the cooler display shows; click for settings",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

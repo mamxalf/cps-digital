@@ -4,8 +4,8 @@ from rt400 import protocol
 
 
 class TemperatureReport(unittest.TestCase):
-    def test_example_from_vendor_analysis(self):
-        r = protocol.temperature_report(46.9)  # dipotong ke 46
+    def test_example_from_vendor_binary_analysis(self):
+        r = protocol.temperature_report(46.9)  # truncated to 46
         self.assertEqual(len(r), 64)
         self.assertEqual(r[:6].hex(), "07ffff000406")
         self.assertEqual(r[6:], bytes(58))
@@ -16,7 +16,7 @@ class TemperatureReport(unittest.TestCase):
 
     def test_fahrenheit(self):
         self.assertEqual(protocol.to_display_value(50, "f"), 122)
-        self.assertEqual(protocol.to_display_value(100, "f"), 199)  # 212 di-clamp
+        self.assertEqual(protocol.to_display_value(100, "f"), 199)  # 212 is clamped
 
     def test_digits(self):
         self.assertEqual(protocol.temperature_report(199)[3:6], bytes([1, 9, 9]))

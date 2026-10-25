@@ -1,4 +1,4 @@
-"""Akses hidraw untuk layar RT400 lewat ioctl HIDIOCSFEATURE/HIDIOCGFEATURE."""
+"""hidraw access for the RT400 display through the HIDIOCSFEATURE/HIDIOCGFEATURE ioctls."""
 import fcntl
 import os
 from pathlib import Path
@@ -18,7 +18,7 @@ HIDIOCGFEATURE = _feature_ioctl(0x07)
 
 
 def find_display(sysfs=SYSFS):
-    """Kembalikan path /dev/hidraw* untuk interface vendor layar, atau None."""
+    """Return the /dev/hidraw* path of the display's vendor interface, or None."""
     for dev in sorted(sysfs.glob("hidraw*")):
         try:
             uevent = (dev / "device" / "uevent").read_text()
@@ -35,7 +35,7 @@ class Display:
     def __init__(self, path=None):
         path = path or find_display()
         if path is None:
-            raise FileNotFoundError("layar RT400 (1a2c:444d) tidak ditemukan")
+            raise FileNotFoundError("RT400 display (1a2c:444d) not found")
         self.path = Path(path)
         self.fd = os.open(self.path, os.O_RDWR)
 
@@ -57,7 +57,7 @@ class Display:
         self._set_feature(protocol.temperature_report(celsius, unit))
 
     def version(self):
-        """Kembalikan respons mentah 64 byte untuk query versi (belum dipetakan ke nomor versi)."""
+        """Return the raw 64-byte reply to the version query (not mapped to a version number)."""
         self._set_feature(protocol.version_report())
         buf = bytearray(protocol.REPORT_SIZE)
         buf[0] = protocol.REPORT_ID

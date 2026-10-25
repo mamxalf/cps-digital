@@ -1,3 +1,4 @@
-# PCCooler RT400 Digital (1a2c:444d, tampil sebagai "SEMICO USB Gaming Keyboard"). Harus bernomor < 73 agar uaccess diproses.
+# PCCooler RT400 Digital (1a2c:444d, enumerates as "SEMICO USB Gaming Keyboard").
+# The file name must sort before 73-seat-late.rules, otherwise the uaccess tag is never processed.
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a2c", ATTRS{idProduct}=="444d", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1a2c", ATTRS{idProduct}=="444d", TAG+="uaccess"

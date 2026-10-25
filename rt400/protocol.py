@@ -1,22 +1,22 @@
-"""Paket USB HID untuk PCCooler RT400 Digital (1a2c:444d, vendor collection 0xff01).
+"""USB HID packets for the PCCooler RT400 Digital display (1a2c:444d, vendor collection 0xff01).
 
-Protokol sama dengan RT500 Digital; lihat docs/PROTOCOL.md untuk sumbernya.
+Same protocol as the RT500 Digital; see docs/PROTOCOL.md for the sources.
 """
 
 VID, PID = 0x1A2C, 0x444D
 REPORT_ID = 7
-REPORT_SIZE = 64  # termasuk report ID
+REPORT_SIZE = 64  # including the report ID
 MAX_VALUE = 199
 
 CMD_VERSION = 0xFD
 CMD_TEMPERATURE = 0xFF
 
-# Potongan report descriptor yang menandai collection layar (Usage Page 0xff01, report ID 7).
-DISPLAY_COLLECTION = bytes.fromhex("06 01 ff 09 01 a1 01 85 07".replace(" ", ""))
+# Fragment of the report descriptor that marks the display collection (usage page 0xff01, report ID 7).
+DISPLAY_COLLECTION = bytes.fromhex("0601ff0901a1018507")
 
 
 def to_display_value(celsius, unit="c"):
-    """Samakan dengan vendor: potong ke int, konversi F di host, clamp 0..199."""
+    """Match the vendor app: truncate to int, convert to F on the host, clamp to 0..199."""
     value = int(celsius)
     if unit == "f":
         value = int(value * 1.8 + 32)

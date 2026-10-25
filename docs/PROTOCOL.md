@@ -1,24 +1,29 @@
-# Protokol layar RT400 Digital
+# RT400 Digital display protocol
 
 USB `1a2c:444d` ("SEMICO USB Gaming Keyboard"), interface 1, vendor collection
-Usage Page `0xff01`, Report ID 7, Feature/Output 63 byte (64 dengan report ID).
+usage page `0xff01`, report ID 7, feature/output reports of 63 bytes (64 with the report ID).
 
-Dikirim lewat `HIDIOCSFEATURE(64)` (`0xc0404806`):
+Sent with `HIDIOCSFEATURE(64)` (`0xc0404806`):
 
-| Byte | Nilai | Arti |
+| Byte | Value | Meaning |
 | --- | --- | --- |
 | 0 | `07` | Report ID |
-| 1 | `ff` | Perintah suhu (`fd` = query versi) |
-| 2 | `ff` | Prefix konstan |
-| 3-5 | digit | ratusan (0-1), puluhan, satuan; rentang 0-199 |
+| 1 | `ff` | Temperature command (`fd` = version query) |
+| 2 | `ff` | Constant prefix |
+| 3-5 | digits | hundreds (0-1), tens, ones; range 0-199 |
 | 6-63 | `00` | Padding |
 
-Layar hanya menampilkan angka 0-199, bukan teks bebas. Satuan F dikonversi di host
-(`int(int(C)*1.8+32)`, clamp 199).
+The display only shows the number 0-199; it cannot show free text. Fahrenheit is converted on the
+host (`int(int(C) * 1.8 + 32)`, clamped to 199).
 
-## Sumber dan status verifikasi
-- Pemetaan paket berasal dari https://github.com/ppfmr-arch/rt500-linux (MIT), yang
-  menganalisis `DeviceDriver.exe` CPS-Digital dan memvalidasinya di **RT500**.
-- Kesamaan dengan RT400: VID:PID sama, `DeviceDriver.exe` dari installer 1.0.1.4 memuat
-  `VID_1A2C&PID_444D`, dan descriptor hidraw7 di mesin ini cocok persis dengan koleksi di atas.
-- **Belum diverifikasi di RT400**: paket belum pernah dikirim ke perangkat ini.
+## Sources and verification status
+
+- The packet layout comes from https://github.com/ppfmr-arch/rt500-linux (MIT), which analysed the
+  official CPS-Digital `DeviceDriver.exe` and validated it on an **RT500**.
+- Why it applies to the RT400: the same VID:PID, `DeviceDriver.exe` from CPS-Digital 1.0.1.4 contains
+  `VID_1A2C&PID_444D`, and the hidraw descriptor of an RT400 matches the collection above exactly.
+- **Confirmed on an RT400**: the temperature command was sent to real hardware and the number on the
+  display matched the CPU temperature. The version query (`fd`) is implemented but its reply is not
+  mapped to a version number.
+- No other command was found or sent. Anything beyond `ff` and `fd` is unexplored; do not guess
+  at bytes, the same interface also carries the keyboard-style collections of the device.

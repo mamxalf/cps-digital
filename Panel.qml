@@ -8,8 +8,8 @@ import qs.Ui
 // rt400d; BarWidget.qml owns it and this panel only reads and requests.
 Panel {
   id: root
-  moduleName: "local.pccooler-rt400"
-  ipcTarget: "local.pccooler-rt400"
+  moduleName: "io.github.mamxalf.pccooler-rt400"
+  ipcTarget: "io.github.mamxalf.pccooler-rt400"
   manageIpc: false
 
   property var anchorItem: null

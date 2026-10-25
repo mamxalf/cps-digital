@@ -1,4 +1,4 @@
-"""rt400d: kirim nilai ke layar RT400 tiap detik, kontrol lewat Unix socket JSON."""
+"""rt400d: sends a value to the RT400 display every second; controlled over a JSON Unix socket."""
 import json
 import os
 import socket
@@ -26,10 +26,10 @@ class State:
         self.rotate_sources = ["cpu", "load"]
         self.rotate_seconds = 5
         self.alert = False
-        self.alert_threshold = 85  # derajat Celsius
+        self.alert_threshold = 85  # degrees Celsius
         self.interval = 1.0
-        self.shown = None   # nilai terakhir yang dikirim (sebelum kedip/konversi)
-        self.active = None  # sumber yang sedang tampil (berbeda dari source saat rotate)
+        self.shown = None   # last value read (before blink/conversion)
+        self.active = None  # source currently on the display (differs from source while rotating)
         self.alerting = False
         self.error = None
         self._load()
@@ -39,7 +39,7 @@ class State:
             saved = json.loads(self.config.read_text())
             self.apply({k: v for k, v in saved.items() if k in PERSISTED}, save=False)
         except (OSError, ValueError, TypeError):
-            pass  # tanpa/dengan konfigurasi rusak: pakai bawaan
+            pass  # missing or corrupt config: keep the defaults
 
     def _save(self):
         try:
@@ -60,18 +60,18 @@ class State:
         with self.lock:
             if "source" in req:
                 if req["source"] not in SOURCES:
-                    raise ValueError(f"source harus salah satu dari {SOURCES}")
+                    raise ValueError(f"source must be one of {SOURCES}")
                 self.source = req["source"]
             if "unit" in req:
                 if req["unit"] not in ("c", "f"):
-                    raise ValueError("unit harus c atau f")
+                    raise ValueError("unit must be c or f")
                 self.unit = req["unit"]
             if "fixed" in req:
                 self.fixed = max(0, min(199, int(req["fixed"])))
             if "rotate_sources" in req:
                 lst = list(req["rotate_sources"])
                 if not lst or any(s not in ROTATABLE for s in lst):
-                    raise ValueError(f"rotate_sources harus berisi {ROTATABLE}")
+                    raise ValueError(f"rotate_sources must be a non-empty list of {ROTATABLE}")
                 self.rotate_sources = lst
             if "rotate_seconds" in req:
                 self.rotate_seconds = max(2, min(60, int(req["rotate_seconds"])))
@@ -84,7 +84,7 @@ class State:
 
 
 def choose(snap, now, read=sensors.read):
-    """Tentukan (sumber aktif, nilai) untuk saat ini. Sumber rotasi tanpa sensor dilewati."""
+    """Pick (active source, value) for now. Rotation skips sources without a sensor."""
     if snap["source"] == "fixed":
         return "fixed", snap["fixed"]
     if snap["source"] != "rotate":
@@ -100,7 +100,7 @@ def choose(snap, now, read=sensors.read):
 
 
 def to_send(snap, active, value, now):
-    """Nilai akhir untuk layar: kedip ke 0 saat peringatan aktif. Kembalikan (nilai, alerting)."""
+    """Final value for the display: blinks to 0 while the alert is active. Returns (value, alerting)."""
     alerting = bool(snap["alert"] and active in sensors.TEMP_SOURCES and value is not None
                     and value >= snap["alert_threshold"])
     if alerting and int(now / BLINK_PERIOD) % 2:
@@ -144,7 +144,7 @@ def serve(state, path=SOCKET):
 
 def main():
     if already_running():
-        raise SystemExit("rt400d sudah berjalan (cek: systemctl --user status rt400d)")
+        raise SystemExit("rt400d is already running (check: systemctl --user status rt400d)")
     state = State()
     threading.Thread(target=serve, args=(state,), daemon=True).start()
     display = None
@@ -157,9 +157,9 @@ def main():
                 display = display or device.Display()
                 active, value = choose(snap, now)
                 if value is None:
-                    raise RuntimeError("sensor tidak tersedia")
+                    raise RuntimeError("sensor unavailable")
                 out, alerting = to_send(snap, active, value, now)
-                # Hanya suhu yang dikonversi ke F; persen dan nilai tetap tampil apa adanya.
+                # Only temperatures are converted to F; percentages and fixed values are shown as is.
                 unit = snap["unit"] if active in sensors.TEMP_SOURCES else "c"
                 display.show(out, unit)
                 with state.lock:
