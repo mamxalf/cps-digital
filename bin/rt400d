@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from rt400.daemon import main; main()' "$(dirname "$(readlink -f "$0")")/.." "$@"

@@ -1,0 +1,10 @@
+[Unit]
+Description=PCCooler RT400 display daemon
+
+[Service]
+ExecStart=%h/.local/bin/rt400d
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

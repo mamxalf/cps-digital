@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "local.pccooler-rt400",
+  "name": "PCCooler RT400",
+  "version": "0.1.0",
+  "author": "motifakes",
+  "license": "MIT",
+  "description": "Shows the temperature sent to the PCCooler RT400 Digital display; click to change source",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "PCCooler RT400",
+    "description": "Cooler display temperature and source",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
