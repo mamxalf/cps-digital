@@ -1,4 +1,4 @@
-"""rt400d: kirim suhu ke layar RT400 tiap detik, kontrol lewat Unix socket JSON."""
+"""rt400d: kirim nilai ke layar RT400 tiap detik, kontrol lewat Unix socket JSON."""
 import json
 import os
 import socket
@@ -9,25 +9,54 @@ from pathlib import Path
 from . import device, sensors
 
 SOCKET = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "rt400.sock"
-SOURCES = ("cpu", "gpu", "max", "fixed")
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "rt400" / "config.json"
+ROTATABLE = tuple(k for k in sensors.KINDS if k != "fixed")
+SOURCES = ROTATABLE + ("fixed", "rotate")
+PERSISTED = ("source", "unit", "fixed", "rotate_sources", "rotate_seconds", "alert", "alert_threshold")
+BLINK_PERIOD = 0.5
 
 
 class State:
-    def __init__(self):
+    def __init__(self, config=CONFIG):
         self.lock = threading.Lock()
+        self.config = config
         self.source = "cpu"
         self.unit = "c"
         self.fixed = 0
+        self.rotate_sources = ["cpu", "load"]
+        self.rotate_seconds = 5
+        self.alert = False
+        self.alert_threshold = 85  # derajat Celsius
         self.interval = 1.0
-        self.shown = None  # nilai terakhir (Celsius) yang dikirim
+        self.shown = None   # nilai terakhir yang dikirim (sebelum kedip/konversi)
+        self.active = None  # sumber yang sedang tampil (berbeda dari source saat rotate)
+        self.alerting = False
         self.error = None
+        self._load()
+
+    def _load(self):
+        try:
+            saved = json.loads(self.config.read_text())
+            self.apply({k: v for k, v in saved.items() if k in PERSISTED}, save=False)
+        except (OSError, ValueError, TypeError):
+            pass  # tanpa/dengan konfigurasi rusak: pakai bawaan
+
+    def _save(self):
+        try:
+            self.config.parent.mkdir(parents=True, exist_ok=True)
+            self.config.write_text(json.dumps({k: getattr(self, k) for k in PERSISTED}))
+        except OSError:
+            pass
 
     def snapshot(self):
         with self.lock:
-            return {"source": self.source, "unit": self.unit, "fixed": self.fixed,
-                    "interval": self.interval, "shown": self.shown, "error": self.error}
+            out = {k: getattr(self, k) for k in PERSISTED}
+            out.update(interval=self.interval, shown=self.shown, active=self.active,
+                       alerting=self.alerting, error=self.error,
+                       kind=sensors.KINDS.get(self.active or self.source, "raw"))
+            return out
 
-    def apply(self, req):
+    def apply(self, req, save=True):
         with self.lock:
             if "source" in req:
                 if req["source"] not in SOURCES:
@@ -39,6 +68,44 @@ class State:
                 self.unit = req["unit"]
             if "fixed" in req:
                 self.fixed = max(0, min(199, int(req["fixed"])))
+            if "rotate_sources" in req:
+                lst = list(req["rotate_sources"])
+                if not lst or any(s not in ROTATABLE for s in lst):
+                    raise ValueError(f"rotate_sources harus berisi {ROTATABLE}")
+                self.rotate_sources = lst
+            if "rotate_seconds" in req:
+                self.rotate_seconds = max(2, min(60, int(req["rotate_seconds"])))
+            if "alert" in req:
+                self.alert = bool(req["alert"])
+            if "alert_threshold" in req:
+                self.alert_threshold = max(30, min(110, int(req["alert_threshold"])))
+            if save:
+                self._save()
+
+
+def choose(snap, now, read=sensors.read):
+    """Tentukan (sumber aktif, nilai) untuk saat ini. Sumber rotasi tanpa sensor dilewati."""
+    if snap["source"] == "fixed":
+        return "fixed", snap["fixed"]
+    if snap["source"] != "rotate":
+        return snap["source"], read(snap["source"])
+    lst = snap["rotate_sources"]
+    start = int(now // snap["rotate_seconds"]) % len(lst)
+    for i in range(len(lst)):
+        source = lst[(start + i) % len(lst)]
+        value = read(source)
+        if value is not None:
+            return source, value
+    return lst[start], None
+
+
+def to_send(snap, active, value, now):
+    """Nilai akhir untuk layar: kedip ke 0 saat peringatan aktif. Kembalikan (nilai, alerting)."""
+    alerting = bool(snap["alert"] and active in sensors.TEMP_SOURCES and value is not None
+                    and value >= snap["alert_threshold"])
+    if alerting and int(now / BLINK_PERIOD) % 2:
+        return 0, True
+    return value, alerting
 
 
 def handle(conn, state):
@@ -75,13 +142,6 @@ def serve(state, path=SOCKET):
         threading.Thread(target=handle, args=(conn, state), daemon=True).start()
 
 
-def pick_value(state):
-    snap = state.snapshot()
-    if snap["source"] == "fixed":
-        return snap["fixed"]
-    return sensors.read(snap["source"])
-
-
 def main():
     if already_running():
         raise SystemExit("rt400d sudah berjalan (cek: systemctl --user status rt400d)")
@@ -90,23 +150,27 @@ def main():
     display = None
     try:
         while True:
+            now = time.time()
+            snap = state.snapshot()
+            alerting = False
             try:
                 display = display or device.Display()
-                value = pick_value(state)
+                active, value = choose(snap, now)
                 if value is None:
                     raise RuntimeError("sensor tidak tersedia")
-                # Mode fixed menampilkan angka apa adanya; konversi F hanya untuk suhu sensor.
-                unit = "c" if state.source == "fixed" else state.unit
-                display.show(value, unit)
+                out, alerting = to_send(snap, active, value, now)
+                # Hanya suhu yang dikonversi ke F; persen dan nilai tetap tampil apa adanya.
+                unit = snap["unit"] if active in sensors.TEMP_SOURCES else "c"
+                display.show(out, unit)
                 with state.lock:
-                    state.shown, state.error = value, None
+                    state.shown, state.active, state.alerting, state.error = value, active, alerting, None
             except (OSError, RuntimeError) as exc:
                 if display:
                     display.close()
                     display = None
                 with state.lock:
                     state.error = str(exc)
-            time.sleep(state.interval)
+            time.sleep(BLINK_PERIOD if alerting else snap["interval"])
     finally:
         if display:
             display.close()

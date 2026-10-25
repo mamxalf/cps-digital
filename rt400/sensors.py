@@ -45,13 +45,55 @@ def gpu_temp(root=HWMON):
     return _read_milli(path) if path else None
 
 
+def nvme_temp(root=HWMON):
+    path = _find(("nvme",), ("Composite",), root)
+    return _read_milli(path) if path else None
+
+
+_prev_cpu = None
+
+
+def cpu_load(stat="/proc/stat"):
+    """Beban CPU 0-100 sejak panggilan sebelumnya (pertama kali: 0)."""
+    global _prev_cpu
+    with open(stat) as f:
+        vals = [int(v) for v in f.readline().split()[1:]]
+    idle, total = vals[3] + vals[4], sum(vals)
+    prev, _prev_cpu = _prev_cpu, (idle, total)
+    if prev is None or total <= prev[1]:
+        return 0.0
+    return 100.0 * (1 - (idle - prev[0]) / (total - prev[1]))
+
+
+def ram_percent(meminfo="/proc/meminfo"):
+    info = {}
+    with open(meminfo) as f:
+        for line in f:
+            key, _, rest = line.partition(":")
+            info[key] = int(rest.split()[0])
+    total, avail = info.get("MemTotal"), info.get("MemAvailable")
+    return 100.0 * (1 - avail / total) if total and avail is not None else None
+
+
+# Jenis nilai: "temp" dikonversi ke F bila diminta, "percent" diberi sufiks %.
+KINDS = {"cpu": "temp", "gpu": "temp", "max": "temp", "nvme": "temp",
+         "load": "percent", "ram": "percent", "fixed": "raw"}
+TEMP_SOURCES = tuple(k for k, v in KINDS.items() if v == "temp")
+
+
 def read(source, root=HWMON):
-    """source: cpu | gpu | max. Kembalikan None bila sensor tak tersedia."""
+    """Kembalikan nilai sumber, atau None bila sensor tak tersedia."""
     if source == "cpu":
         return cpu_temp(root)
     if source == "gpu":
         return gpu_temp(root)
+    if source == "nvme":
+        return nvme_temp(root)
     if source == "max":
-        values = [v for v in (cpu_temp(root), gpu_temp(root)) if v is not None]
+        values = [v for v in (cpu_temp(root), gpu_temp(root), nvme_temp(root)) if v is not None]
         return max(values) if values else None
+    if source == "load":
+        return cpu_load()
+    if source == "ram":
+        return ram_percent()
     raise ValueError(f"sumber tidak dikenal: {source}")

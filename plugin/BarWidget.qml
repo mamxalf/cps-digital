@@ -16,14 +16,25 @@ BarWidget {
   property string source: "cpu"
   property string unit: "c"
   property int fixed: 0
+  property string active: "cpu"
+  property string kind: "temp"
+  property var rotateSources: ["cpu", "load"]
+  property int rotateSeconds: 5
+  property bool alert: false
+  property int alertThreshold: 85
+  property bool alerting: false
   property var shown: null
   property string error: ""
 
+  // The display shows temperatures (convertible to F), percentages, or a raw
+  // number; the daemon says which via `kind`.
   readonly property string label: error !== "" || shown === null
     ? "--"
-    : source === "fixed"
-      ? String(Math.round(shown))
-      : Math.round(unit === "f" ? shown * 1.8 + 32 : shown) + "°" + unit.toUpperCase()
+    : kind === "temp"
+      ? Math.round(unit === "f" ? shown * 1.8 + 32 : shown) + "°" + unit.toUpperCase()
+      : kind === "percent"
+        ? Math.round(shown) + "%"
+        : String(Math.round(shown))
 
   function apply(text) {
     try {
@@ -31,6 +42,13 @@ BarWidget {
       source = s.source
       unit = s.unit
       fixed = s.fixed
+      active = s.active || s.source
+      kind = s.kind || "temp"
+      rotateSources = s.rotate_sources
+      rotateSeconds = s.rotate_seconds
+      alert = s.alert
+      alertThreshold = s.alert_threshold
+      alerting = s.alerting
       shown = s.shown
       error = s.ok ? (s.error || "") : (s.error || "error")
     } catch (e) {
@@ -47,6 +65,10 @@ BarWidget {
   function setSource(value) { run(["set", "--source", value]) }
   function setUnit(value) { run(["set", "--unit", value]) }
   function setFixed(value) { run(["set", "--fixed", String(value)]) }
+  function setRotateSources(list) { run(["set", "--rotate-sources", list.join(",")]) }
+  function setRotateSeconds(value) { run(["set", "--rotate-seconds", String(value)]) }
+  function setAlert(on) { run(["set", "--alert", on ? "on" : "off"]) }
+  function setAlertThreshold(value) { run(["set", "--alert-threshold", String(value)]) }
 
   // ---- Settings popup. Bar.findPanelWidget requires open/close/opened on
   //      the bar-widget root, so they are forwarded to the loaded panel.
@@ -111,7 +133,7 @@ BarWidget {
   }
 
   Timer {
-    interval: 2000
+    interval: 1000
     running: true
     repeat: true
     triggeredOnStart: true
@@ -124,7 +146,9 @@ BarWidget {
     bar: root.bar
     text: "󰈐 " + root.label
     hasVisualContent: true
-    tooltipText: "RT400 display: " + root.source.toUpperCase()
+    tooltipText: "RT400 display: "
+      + (root.source === "rotate" ? "ROTATE (" + root.active.toUpperCase() + ")" : root.active.toUpperCase())
+      + (root.alerting ? " - OVER LIMIT" : "")
       + (root.error !== "" ? " (" + root.error + ")" : "")
 
     onPressed: function(b) { root.togglePanel() }
