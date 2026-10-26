@@ -14,6 +14,32 @@ ROTATABLE = tuple(k for k in sensors.KINDS if k != "fixed")
 SOURCES = ROTATABLE + ("fixed", "rotate")
 PERSISTED = ("source", "unit", "fixed", "rotate_sources", "rotate_seconds", "alert", "alert_threshold")
 BLINK_PERIOD = 0.5
+STALL_LIMIT = 5        # consecutive EPIPE writes before the device is USB-reset
+RESET_COOLDOWN = 30.0  # seconds between resets
+
+
+class StallWatch:
+    """Counts consecutive write stalls (EPIPE) and says when a USB reset is due."""
+
+    def __init__(self, limit=STALL_LIMIT, cooldown=RESET_COOLDOWN):
+        self.limit, self.cooldown = limit, cooldown
+        self.count = 0
+        self.last_reset = None
+
+    def ok(self):
+        self.count = 0
+
+    def failed(self, exc, now):
+        if not isinstance(exc, BrokenPipeError):
+            self.count = 0
+            return False
+        self.count += 1
+        if self.count < self.limit:
+            return False
+        if self.last_reset is not None and now - self.last_reset < self.cooldown:
+            return False
+        self.count, self.last_reset = 0, now
+        return True
 
 
 class State:
@@ -148,6 +174,7 @@ def main():
     state = State()
     threading.Thread(target=serve, args=(state,), daemon=True).start()
     display = None
+    watch = StallWatch()
     try:
         while True:
             now = time.time()
@@ -164,12 +191,20 @@ def main():
                 display.show(out, unit)
                 with state.lock:
                     state.shown, state.active, state.alerting, state.error = value, active, alerting, None
+                watch.ok()
             except (OSError, RuntimeError) as exc:
                 if display:
                     display.close()
                     display = None
                 with state.lock:
                     state.error = str(exc)
+                if watch.failed(exc, now):
+                    try:
+                        device.reset()
+                        time.sleep(2)  # let the device re-enumerate
+                    except OSError as reset_exc:
+                        with state.lock:
+                            state.error = f"{exc}; reset failed: {reset_exc}"
             time.sleep(BLINK_PERIOD if alerting else snap["interval"])
     finally:
         if display:

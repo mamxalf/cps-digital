@@ -31,6 +31,33 @@ def find_display(sysfs=SYSFS):
     return None
 
 
+USBDEVFS_RESET = 0x5514
+
+
+def usb_device_node(hidraw, sysfs=SYSFS):
+    """Return the /dev/bus/usb node of the USB device behind a /dev/hidrawN path, or None."""
+    usb = (sysfs / Path(hidraw).name / "device").resolve().parent.parent
+    try:
+        bus, dev = int((usb / "busnum").read_text()), int((usb / "devnum").read_text())
+    except (OSError, ValueError):
+        return None
+    return Path(f"/dev/bus/usb/{bus:03d}/{dev:03d}")
+
+
+def reset(hidraw=None):
+    """USB-reset the display (fixes a stalled endpoint). Returns True when the reset was issued."""
+    hidraw = hidraw or find_display()
+    node = usb_device_node(hidraw) if hidraw else None
+    if node is None:
+        return False
+    fd = os.open(node, os.O_WRONLY)
+    try:
+        fcntl.ioctl(fd, USBDEVFS_RESET)
+    finally:
+        os.close(fd)
+    return True
+
+
 class Display:
     def __init__(self, path=None):
         path = path or find_display()

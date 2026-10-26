@@ -50,6 +50,28 @@ class Alert(unittest.TestCase):
         self.assertEqual(daemon.to_send(snap(alert=False), "cpu", 99, 0.6), (99, False))
 
 
+class Stall(unittest.TestCase):
+    def test_reset_after_consecutive_epipe(self):
+        w = daemon.StallWatch(limit=3, cooldown=30)
+        e = BrokenPipeError()
+        self.assertEqual([w.failed(e, t) for t in (0, 1, 2)], [False, False, True])
+
+    def test_success_or_other_error_restarts_count(self):
+        w = daemon.StallWatch(limit=2, cooldown=30)
+        w.failed(BrokenPipeError(), 0)
+        w.ok()
+        self.assertFalse(w.failed(BrokenPipeError(), 1))
+        self.assertFalse(w.failed(PermissionError(), 2))
+        self.assertFalse(w.failed(BrokenPipeError(), 3))
+
+    def test_cooldown(self):
+        w = daemon.StallWatch(limit=1, cooldown=30)
+        e = BrokenPipeError()
+        self.assertTrue(w.failed(e, 0))
+        self.assertFalse(w.failed(e, 10))
+        self.assertTrue(w.failed(e, 31))
+
+
 class Persistence(unittest.TestCase):
     def test_roundtrip_and_validation(self):
         with tempfile.TemporaryDirectory() as d:
